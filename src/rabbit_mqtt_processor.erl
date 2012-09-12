@@ -466,7 +466,7 @@ adapter_info(Sock) ->
                {ok, Res3} -> Res3;
                _          -> unknown
            end,
-    #amqp_adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
+         #adapter_info{ protocol     = {'MQTT', {?MQTT_PROTO_MAJOR,
                                                  ?MQTT_PROTO_MINOR}},
                         name         = list_to_binary(Name),
                         address      = Addr,
