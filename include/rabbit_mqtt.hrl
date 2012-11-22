@@ -35,5 +35,4 @@
                       clean_sess,
                       will_msg,
                       channels,
-                      connection,
-                      exchange }).
+                      connection }).

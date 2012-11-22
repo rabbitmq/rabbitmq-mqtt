@@ -8,7 +8,11 @@
          {default_pass, <<"guest">>},
          {allow_anonymous, true},
          {vhost, <<"/">>},
-         {exchange, <<"amq.topic">>},
+         {default_exchange, <<"amq.topic">>},
+         {exchange_mapping, undefined},
+         {topic_mapping, undefined},
+         %% {exchange_mapping, {<<"^((finance|weather)\\..*)$">>, <<"\\2.topic">>}},
+         %% {topic_mapping, {<<"^((finance|weather)\\.(.*))$">>, <<"\\3">>}},
          {subscription_ttl, 1800000}, % 30 min
          {prefetch, 10},
          {ssl_listeners, []},

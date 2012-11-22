@@ -34,7 +34,6 @@ initial_state(Socket) ->
                  subscriptions = dict:new(),
                  consumer_tags = {undefined, undefined},
                  channels      = {undefined, undefined},
-                 exchange      = rabbit_mqtt_util:env(exchange),
                  socket        = Socket }.
 
 info(client_id, #proc_state{ client_id = ClientId }) -> ClientId.
@@ -128,19 +127,20 @@ process_request(?SUBSCRIBE,
                   variable = #mqtt_frame_subscribe{ message_id  = MessageId,
                                                     topic_table = Topics },
                   payload = undefined },
-                #proc_state{ channels = {Channel, _},
-                             exchange = Exchange} = PState0) ->
+                #proc_state{ channels = {Channel, _}} = PState0) ->
     {QosResponse, PState1} =
         lists:foldl(fun (#mqtt_topic{ name = TopicName,
                                        qos  = Qos }, {QosList, PState}) ->
                        SupportedQos = supported_subs_qos(Qos),
                        {Queue, #proc_state{ subscriptions = Subs } = PState1} =
                            ensure_queue(SupportedQos, PState),
+                       AmqpTopic = rabbit_mqtt_util:mqtt2amqp(TopicName),
+                       Exchange = rabbit_mqtt_util:map_exchange(AmqpTopic),
+                       MappedTopic = rabbit_mqtt_util:map_topic(AmqpTopic),
                        Binding = #'queue.bind'{
                                    queue       = Queue,
                                    exchange    = Exchange,
-                                   routing_key = rabbit_mqtt_util:mqtt2amqp(
-                                                   TopicName)},
+                                   routing_key = MappedTopic},
                        #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
                        {[SupportedQos | QosList],
                         PState1 #proc_state{ subscriptions =
@@ -158,7 +158,6 @@ process_request(?UNSUBSCRIBE,
                   variable = #mqtt_frame_subscribe{ message_id  = MessageId,
                                                     topic_table = Topics },
                   payload = undefined }, #proc_state{ channels      = {Channel, _},
-                                                      exchange      = Exchange,
                                                       client_id     = ClientId,
                                                       subscriptions = Subs0} = PState) ->
     Queues = rabbit_mqtt_util:subcription_queue_name(ClientId),
@@ -172,11 +171,13 @@ process_request(?UNSUBSCRIBE,
         lists:foreach(
           fun (QosSub) ->
                   Queue = element(QosSub + 1, Queues),
+                  AmqpTopic = rabbit_mqtt_util:mqtt2amqp(TopicName),
+                  Exchange = rabbit_mqtt_util:map_exchange(AmqpTopic),
+                  MappedTopic = rabbit_mqtt_util:map_topic(AmqpTopic),
                   Binding = #'queue.unbind'{
                               queue       = Queue,
                               exchange    = Exchange,
-                              routing_key =
-                                  rabbit_mqtt_util:mqtt2amqp(TopicName)},
+                              routing_key = MappedTopic},
                   #'queue.unbind_ok'{} = amqp_channel:call(Channel, Binding)
           end, QosSubs),
         dict:erase(TopicName, Subs)
@@ -431,12 +432,13 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
                     message_id = MessageId,
                     payload    = Payload },
          PState = #proc_state{ channels       = {ChQos0, ChQos1},
-                               exchange       = Exchange,
                                unacked_pubs   = UnackedPubs,
                                awaiting_seqno = SeqNo }) ->
+    AmqpTopic = rabbit_mqtt_util:mqtt2amqp(Topic),
+    Exchange = rabbit_mqtt_util:map_exchange(AmqpTopic),
+    MappedTopic = rabbit_mqtt_util:map_topic(AmqpTopic),
     Method = #'basic.publish'{ exchange    = Exchange,
-                               routing_key =
-                                   rabbit_mqtt_util:mqtt2amqp(Topic)},
+                               routing_key = MappedTopic},
     Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
                {<<"x-mqtt-dup">>, bool, Dup}],
     Msg = #amqp_msg{ props   = #'P_basic'{ headers = Headers },

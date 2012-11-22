@@ -404,6 +404,61 @@ public class MqttTest extends TestCase implements MqttCallback {
         client.disconnect();
     }
 
+    /**
+     * Test assumes MQTT adapter plugin to be configured with the following exchange and topic mappings:
+     *
+     * {exchange_mapping, {<<"^((finance|weather)\\..*)$">>, <<"\\2.topic">>}},
+     * {topic_mapping, {<<"^((finance|weather)\\.(.*))$">>, <<"\\3">>}},
+     *
+     */
+    /*public void testPublishExchangeTopicMapping() throws MqttException, IOException, InterruptedException {
+        final String mqttTopic = "finance/stock/vmware";
+        final String exchangeName = "finance.topic";
+        final String amqpTopic = "stock.vmware";
+
+        setUpAmqp();
+        ch.exchangeDeclare(exchangeName, "topic");
+        String queue = ch.queueDeclare().getQueue();
+        ch.queueBind(queue, exchangeName, amqpTopic);
+
+        client.connect(conOpt);
+        publish(client, mqttTopic, 1, payload);
+        client.disconnect();
+        Thread.sleep(testDelay);
+
+        GetResponse response = ch.basicGet(queue, true);
+        assertTrue(Arrays.equals(payload, response.getBody()));
+        assertNull(ch.basicGet(queue, true));
+        tearDownAmqp();
+    }*/
+
+    /**
+     * Test assumes MQTT adapter plugin to be configured with the following exchange and topic mappings:
+     *
+     * {exchange_mapping, {<<"^((finance|weather)\\..*)$">>, <<"\\2.topic">>}},
+     * {topic_mapping, {<<"^((finance|weather)\\.(.*))$">>, <<"\\3">>}},
+     *
+     */
+    /*public void testSubscribeExchangeTopicMapping() throws MqttException, IOException, InterruptedException {
+        final String mqttTopic = "finance/stock/vmware";
+        final String exchangeName = "finance.topic";
+        final String amqpTopic = "stock.vmware";
+
+        setUpAmqp();
+        ch.exchangeDeclare(exchangeName, "topic");
+
+        client.connect(conOpt);
+        client.setCallback(this);
+        client.subscribe(mqttTopic, 1);
+
+        ch.basicPublish(exchangeName, amqpTopic, MessageProperties.MINIMAL_BASIC, payload);
+        tearDownAmqp();
+
+        Thread.sleep(testDelay);
+        Assert.assertEquals(1, receivedMessages.size());
+        client.disconnect();
+    }*/
+
     private void publish(MqttClient client, String topicName, int qos, byte[] payload) throws MqttException {
     	MqttTopic topic = client.getTopic(topicName);
    		MqttMessage message = new MqttMessage(payload);
