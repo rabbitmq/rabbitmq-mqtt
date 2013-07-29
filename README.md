@@ -43,7 +43,9 @@ Here is a sample configuration that sets every MQTT option:
                       {default_pass,     <<"guest">>},
                       {allow_anonymous,  true},
                       {vhost,            <<"/">>},
-                      {exchange,         <<"amq.topic">>},
+                      {default_exchange, <<"amq.topic">>},
+                      {exchange_mapping, undefined},
+                      {topic_mapping,    undefined},
                       {subscription_ttl, 1800000},
                       {prefetch,         10},
                       {ssl_listeners,    []},
@@ -62,9 +64,39 @@ The presence of client-supplied credentials over the network overrides
 the `allow_anonymous` option.
 
 The `vhost` option controls which RabbitMQ vhost the adapter connects to and the
-`exchange` option determines which exchange messages from MQTT clients are published
-to. If a non-default exchange is chosen then it must be created before clients
-publish any messages. The exchange is expected to be an AMQP topic exchange.
+`default_exchange` option determines which exchange messages from MQTT clients are
+published to by default. If an exchange other than `amq.topic` is chosen then it must be created
+before clients publish any messages. The exchange is expected to be an AMQP topic exchange.
+
+The `exchange_mapping` option allows for mapping topics that match a particular regular
+expression to non-default exchanges. Mappings are specified by means of a search regular search
+expression and a replace string that are applied to the topic. The resulting string
+is then taken as the exchange name. For instance, if you want to map the MQTT topic
+`finance/stock/vmware` to the exchange `finance.topic`, and the topic `weather/country/gb` to
+the exchange `weather.topic`, you would set `exchange_mapping` option to
+
+```
+{<<"^((finance|weather)\\..*)$">>, <<"\\2.topic">>}
+```
+
+The first item in the tuple is the search pattern whereas the second item is the replace
+string. Refer to the [Erlang regular expression docs](http://www.erlang.org/doc/man/re.html#replace-4)
+for more information on valid patterns. Note that the mapping is carried out on the AMQP routing key and
+not the MQTT topic. They are almost the same, but not entirely: The MQTT adapter translates topics into routing keys
+by replacing `/` with `.` and `+` with `*`. Hence, the mapping operates on dots rather than slashes.
+
+The `topic_mapping` options is almost identical to the `exchange_mapping` option except that it allows
+for rewriting of routing keys using regular expressions. Extending the above finance/weather example, you
+could set this option to the following:
+
+ ```
+ {<<"^((finance|weather)\\.(.*))$">>, <<"\\3">>}
+ ```
+
+Together with the `exchange_mapping` from above this will turn an MQTT topic of `finance/stock/vmware` into
+the routing key `stock.vmware` on the exchange `finance.topic`. While exchange and topic mappings may seem
+complex at first, they allow for very granular control on how MQTT topics are bridged to AMQP exchanges
+and routing keys.
 
 The `subscription_ttl` option controls the lifetime of non-clean sessions. This
 option is interpreted in the same way as the [queue TTL](http://www.rabbitmq.com/ttl.html#queue-ttl)

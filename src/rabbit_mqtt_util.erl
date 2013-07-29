@@ -38,6 +38,21 @@ amqp2mqtt(Topic) ->
       re:replace(re:replace(Topic, "[\*]", "+", [global]),
                  "[\.]", "/", [global])).
 
+map_exchange(Topic) ->
+  map_via_regex(Topic, env(exchange_mapping), env(default_exchange)).
+
+map_topic(Topic) ->
+  map_via_regex(Topic, env(topic_mapping), Topic).
+
+map_via_regex(_, undefined, Default) ->
+  Default;
+map_via_regex(Topic, {Search, Replace}, Default) ->
+  Matches = re:run(Topic, Search, [{capture, none}]),
+  case Matches of
+    match  -> re:replace(Topic, Search, Replace, [{return, binary}]);
+    nomatch -> Default
+  end.
+
 valid_client_id(ClientId) ->
     ClientIdLen = length(ClientId),
     1 =< ClientIdLen andalso ClientIdLen =< ?CLIENT_ID_MAXLEN.
