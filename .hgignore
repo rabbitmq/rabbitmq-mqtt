@@ -1,5 +1,7 @@
 ~$
 \.beam$
+^.*\.iml$
+^.idea
 ^build/
 ^dist/
 ^cover/
@@ -8,3 +10,7 @@
 ^tags$
 ^test/test_client
 ^test/src.*\.class$
+^debug/
+^test/certs
+^test/build$
+^test/ebin
