@@ -22,7 +22,11 @@ endef
 
 .PHONY: test
 test: build_java_amqp
+ifndef RABBITMQ_MQTT_SSLTEST_ONLY
 	ant test -Dhostname=$(HOSTNAME)
+else
+	ant test-ssl -Dhostname=$(HOSTNAME)
+endif
 
 clean:
 	ant clean
