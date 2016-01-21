@@ -508,7 +508,8 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                                clean_sess    = CleanSess,
                           consumer_tags = {TagQ0, TagQ1} = Tags} = PState) ->
     {QueueQ0, QueueQ1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
-    Qos1Args = case {rabbit_mqtt_util:env(subscription_ttl), CleanSess} of
+    SubscriptionTTL = rabbit_mqtt_util:env(subscription_ttl),
+    Qos1Args = case {SubscriptionTTL, CleanSess} of
                    {undefined, _} ->
                        [];
                    {Ms, false} when is_integer(Ms) ->
