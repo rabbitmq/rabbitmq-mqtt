@@ -382,17 +382,21 @@ delivery_qos(Tag, Headers,   #proc_state{ consumer_tags = {_, Tag} }) ->
     end.
 
 maybe_clean_sess(PState = #proc_state { clean_sess = false }) ->
-    {_Queue, PState1} = ensure_queue(?QOS_1, PState),
+    {_Queue0, PState0} = ensure_queue(?QOS_0, PState),
+    {_Queue1, PState1} = ensure_queue(?QOS_1, PState0),
     PState1;
 maybe_clean_sess(PState = #proc_state { clean_sess = true,
                                         connection = Conn,
                                         client_id  = ClientId }) ->
-    {_, Queue} = rabbit_mqtt_util:subcription_queue_name(ClientId),
+    {Queue0, Queue1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
     {ok, Channel} = amqp_connection:open_channel(Conn),
-    try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue }) of
-        #'queue.delete_ok'{} -> ok = amqp_channel:close(Channel)
+    try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue0 })
     catch
-        exit:_Error -> ok
+        exit:_Error0 -> ok
+    end,
+    try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue1 })
+    catch
+        exit:_Error1 -> ok
     end,
     PState.
 
@@ -515,7 +519,8 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                                clean_sess    = CleanSess,
                           consumer_tags = {TagQ0, TagQ1} = Tags} = PState) ->
     {QueueQ0, QueueQ1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
-    Qos1Args = case {rabbit_mqtt_util:env(subscription_ttl), CleanSess} of
+    SubscriptionTTL = rabbit_mqtt_util:env(subscription_ttl),
+    Qos1Args = case {SubscriptionTTL, CleanSess} of
                    {undefined, _} ->
                        [];
                    {Ms, false} when is_integer(Ms) ->
@@ -523,13 +528,22 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                    _ ->
                        []
                end,
+    Qos0Args = case CleanSess of
+                   false -> Qos0Args1 = case is_integer(SubscriptionTTL) of
+                                            true -> [{<<"x-expires">>, long, SubscriptionTTL}];
+                                            false -> []
+                                        end,
+                            lists:append( [{<<"x-message-ttl">>, long, 0}], Qos0Args1);
+                   _ -> []
+               end,
     QueueSetup =
         case {TagQ0, TagQ1, Qos} of
             {undefined, _, ?QOS_0} ->
                 {QueueQ0,
                  #'queue.declare'{ queue       = QueueQ0,
                                    durable     = false,
-                                   auto_delete = true },
+                                   auto_delete = CleanSess,
+                                   arguments   = Qos0Args},
                  #'basic.consume'{ queue  = QueueQ0,
                                    no_ack = true }};
             {_, undefined, ?QOS_1} ->
