@@ -222,6 +222,18 @@ public class MqttTest extends TestCase implements MqttCallback {
         }
     }
 
+    public void testEmptyPassword() throws MqttException {
+        MqttClient c = new MqttClient(brokerUrl, clientId, null);
+        MqttConnectOptions opts = new MyConnOpts();
+        opts.setUserName("guest");
+        opts.setPassword(null);
+        try {
+            c.connect(opts);
+            fail("Authentication failure expected");
+        } catch (MqttException ex) {
+            Assert.assertEquals(MqttException.REASON_CODE_FAILED_AUTHENTICATION, ex.getReasonCode());
+        }
+    }
 
     public void testSubscribeQos0() throws MqttException, InterruptedException {
         client.connect(conOpt);
