@@ -105,7 +105,7 @@ process_request(?CONNECT,
                         rabbit_log:error("MQTT login failed for ~p: no password provided", [User]),
                         {?CONNACK_CREDENTIALS, PState};
                     {UserBin, PassBin} ->
-                        case process_login(UserBin, PassBin, ProtoVersion, PState) of
+                       case process_login(UserBin, PassBin, ProtoVersion, PState, ClientId) of
                             {?CONNACK_ACCEPT, Conn, VHost, AState} ->
                                  RetainerPid =
                                    rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
@@ -456,7 +456,8 @@ process_login(UserBin, PassBin, ProtoVersion,
               #proc_state{ channels     = {undefined, undefined},
                            socket       = Sock,
                            adapter_info = AdapterInfo,
-                           ssl_login_name = SslLoginName}) ->
+                           ssl_login_name = SslLoginName}, 
+              ClientId) ->
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
     rabbit_log:info(
@@ -464,43 +465,51 @@ process_login(UserBin, PassBin, ProtoVersion,
         [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
     case rabbit_vhost:exists(VHost) of
         true  ->
-            case amqp_connection:start(#amqp_params_direct{
-                username     = UsernameBin,
-                password     = PassBin,
-                virtual_host = VHost,
-                adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
-                {ok, Connection} ->
-                    case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
-                        ok          ->
-                            [{internal_user, InternalUser}] = amqp_connection:info(
-                                Connection, [internal_user]),
-                            {?CONNACK_ACCEPT, Connection, VHost,
-                                #auth_state{user = InternalUser,
-                                    username = UsernameBin,
-                                    vhost = VHost}};
-                        not_allowed ->
-                            amqp_connection:close(Connection),
-                            rabbit_log:warning(
-                                "MQTT login failed for ~p access_refused "
-                                "(access must be from localhost)~n",
-                                [binary_to_list(UsernameBin)]),
+            % Checking if the user can connect with providing ClientID before actually starting the connection
+            case check_clientid_access(ClientId, UsernameBin, PassBin, VHost) of 
+                {ok, _} ->
+                    case amqp_connection:start(#amqp_params_direct{
+                        username     = UsernameBin,
+                        password     = PassBin,
+                        virtual_host = VHost,
+                        adapter_info = set_proto_version(AdapterInfo, ProtoVersion)}) of
+                        {ok, Connection} ->
+                            case rabbit_access_control:check_user_loopback(UsernameBin, Sock) of
+                                ok          ->
+                                    [{internal_user, InternalUser}] = amqp_connection:info(
+                                        Connection, [internal_user]),
+                                    {?CONNACK_ACCEPT, Connection, VHost,
+                                        #auth_state{user = InternalUser,
+                                            username = UsernameBin,
+                                            vhost = VHost}};
+                                not_allowed ->
+                                    amqp_connection:close(Connection),
+                                    rabbit_log:warning(
+                                        "MQTT login failed for ~p access_refused "
+                                        "(access must be from localhost)~n",
+                                        [binary_to_list(UsernameBin)]),
+                                    ?CONNACK_AUTH
+                            end;
+                        {error, {auth_failure, Explanation}} ->
+                            rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
+                                [binary_to_list(UserBin), Explanation]),
+                            ?CONNACK_CREDENTIALS;
+                        {error, access_refused} ->
+                            rabbit_log:warning("MQTT login failed for ~p access_refused "
+                            "(vhost access not allowed)~n",
+                                [binary_to_list(UserBin)]),
+                            ?CONNACK_AUTH;
+                        {error, not_allowed} ->
+                            %% when vhost allowed for TLS connection
+                            rabbit_log:warning("MQTT login failed for ~p access_refused "
+                            "(vhost access not allowed)~n",
+                                [binary_to_list(UserBin)]),
                             ?CONNACK_AUTH
                     end;
-                {error, {auth_failure, Explanation}} ->
-                    rabbit_log:error("MQTT login failed for ~p auth_failure: ~s~n",
-                        [binary_to_list(UserBin), Explanation]),
-                    ?CONNACK_CREDENTIALS;
-                {error, access_refused} ->
-                    rabbit_log:warning("MQTT login failed for ~p access_refused "
-                    "(vhost access not allowed)~n",
-                        [binary_to_list(UserBin)]),
-                    ?CONNACK_AUTH;
-                {error, not_allowed} ->
-                    %% when vhost allowed for TLS connection
-                    rabbit_log:warning("MQTT login failed for ~p access_refused "
-                    "(vhost access not allowed)~n",
-                        [binary_to_list(UserBin)]),
-                    ?CONNACK_AUTH
+                _->
+                    %NB: with this implementaton we will return CONNACK_CREDENTIALS even if username and password are correct, but client_id is incorrect  
+                    rabbit_log:error("MQTT login failed for ~p, and ClientId ~p", [UserBin, ClientId]),
+                    ?CONNACK_CREDENTIALS
             end;
         false ->
             rabbit_log:error("MQTT login failed for ~p auth_failure: vhost ~s does not exist~n",
@@ -809,3 +818,11 @@ check_topic_access(TopicName, Access,
                        kind = topic,
                        name = TopicName},
   rabbit_access_control:check_resource_access(User, Resource, Access).
+
+check_clientid_access(ClientId, UsernameBin, PassBin, VHost) ->
+  rabbit_access_control:check_user_login(
+                                 UsernameBin,
+                                 case PassBin of
+                                   none -> [];
+                                   P -> [{password,P}, {vhost, VHost}, {client_id,ClientId}]
+                                 end).
