@@ -52,10 +52,18 @@ cached(CacheName, Fun, Arg) ->
             V
     end.
 
-to_amqp(T0) ->
-    T1 = string:replace(T0, "/", ".", all),
-    T2 = string:replace(T1, "+", "*", all),
-    erlang:iolist_to_binary(T2).
+to_amqp(TopicMqtt) ->
+    PropertyBagB = env(property_bag),
+%%  io:format("to_amqp!~n"),
+    TLevels = string:split(TopicMqtt, "/", all),
+    TAmqpLevels = lists:filter(fun(X) -> not (PropertyBagB == true) or (string:find(X, "=") == nomatch) end, TLevels),
+    TAmqpPropertiesLevel = lists:filter(fun(X) -> (PropertyBagB == true) and not (string:find(X, "=") == nomatch) end, TLevels),
+    TAmqpProperties = lists:flatmap(fun(X) -> string:split(X, "&", all) end, TAmqpPropertiesLevel),
+    HeaderAmqp = lists:map(fun(X) -> X1 = string:split(X, "="), { erlang:iolist_to_binary(lists:nth(1, X1)), longstr, erlang:iolist_to_binary(http_uri:decode(lists:nth(2, X1))) } end, TAmqpProperties),
+    TAmqpTopic = string:join(TAmqpLevels, "."),
+    TopicAmqp = string:replace(TAmqpTopic, "+", "*", all),
+%%  io:format("to_amqp: ~p -> ~p~n", [erlang:iolist_to_binary(TopicAmqp),HeaderAmqp]),
+    { erlang:iolist_to_binary(TopicAmqp), HeaderAmqp }.
 
 to_mqtt(T0) ->
     T1 = string:replace(T0, "*", "+", all),

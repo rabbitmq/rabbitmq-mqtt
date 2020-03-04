@@ -8,6 +8,7 @@
    mqtt.subscription_ttl = 1800000
    mqtt.prefetch         = 10
    mqtt.sparkplug      = true
+   mqtt.property_bag   = true
    mqtt.listeners.ssl    = none
 ## Default MQTT with TLS port is 8883
 #  mqtt.listeners.ssl.default = 8883
@@ -25,6 +26,7 @@
         {subscription_ttl,1800000},
         {prefetch,10},
         {sparkplug,true},
+        {property_bag,true},
         {ssl_listeners,[]},
         {tcp_listeners,[1883]},
         {tcp_listen_options,[{backlog,128},{nodelay,true}]},

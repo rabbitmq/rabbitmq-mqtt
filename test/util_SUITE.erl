@@ -70,20 +70,32 @@ mqtt_amqp_topic_translation(_) ->
     T0 = "/foo/bar/+/baz",
     T0_As_Amqp = <<".foo.bar.*.baz">>,
     T0_As_Mqtt = <<"/foo/bar/+/baz">>,
-    ?assertEqual(T0_As_Amqp, Mqtt2AmqpFun(T0)),
+    ?assertEqual(T0_As_Amqp, element(1, Mqtt2AmqpFun(T0))),
     ?assertEqual(T0_As_Mqtt, Amqp2MqttFun(T0_As_Amqp)),
 
     T1 = "spAv1.0/foo/bar/+/baz",
     T1_As_Amqp = <<"spAv1___0.foo.bar.*.baz">>,
     T1_As_Mqtt = <<"spAv1.0/foo/bar/+/baz">>,
-    ?assertEqual(T1_As_Amqp, Mqtt2AmqpFun(T1)),
+    ?assertEqual(T1_As_Amqp, element(1, Mqtt2AmqpFun(T1))),
     ?assertEqual(T1_As_Mqtt, Amqp2MqttFun(T1_As_Amqp)),
 
     T2 = "spBv2.90/foo/bar/+/baz",
     T2_As_Amqp = <<"spBv2___90.foo.bar.*.baz">>,
     T2_As_Mqtt = <<"spBv2.90/foo/bar/+/baz">>,
-    ?assertEqual(T2_As_Amqp, Mqtt2AmqpFun(T2)),
+    ?assertEqual(T2_As_Amqp, element(1, Mqtt2AmqpFun(T2))),
     ?assertEqual(T2_As_Mqtt, Amqp2MqttFun(T2_As_Amqp)),
 
+    T3 = "a/b/c/d/p1=v1&p2=v2&$.mid=mv1",
+    T3_As_Amqp = <<"a.b.c.d.p1=v1&p2=v2&$.mid=mv1">>,
+    ?assertEqual(T3_As_Amqp, element(1, Mqtt2AmqpFun(T3))),
+
+    ok = application:set_env(rabbitmq_mqtt, property_bag, true),
+
+    T4 = "a/b/c/d/p1=v1&p2=v2&$.mid=mv2",
+    T4_As_Amqp = <<"a.b.c.d">>,
+    ?assertEqual(T4_As_Amqp, element(1, Mqtt2AmqpFun(T4))),
+    ?assertEqual([{<<"p1">>,longstr,<<"v1">>},{<<"p2">>,longstr,<<"v2">>},{<<"$.mid">>,longstr,<<"mv2">>}], element(2, Mqtt2AmqpFun(T4))),
+
     ok = application:unset_env(rabbitmq_mqtt, sparkplug),
+    ok = application:unset_env(rabbitmq_mqtt, property_bag),
     ok.

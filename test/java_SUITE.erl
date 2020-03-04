@@ -26,6 +26,7 @@
            {ssl_cert_login,   true},
            {allow_anonymous,  false},
            {sparkplug,        true},
+           {property_bag,     true},
            {tcp_listeners,    []},
            {ssl_listeners,    []}
            ]}).

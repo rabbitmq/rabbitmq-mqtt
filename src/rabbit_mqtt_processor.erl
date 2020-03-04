@@ -267,7 +267,8 @@ process_request(?SUBSCRIBE,
                            SupportedQos = supported_subs_qos(Qos),
                            {Queue, #proc_state{subscriptions = Subs} = PState1} =
                                ensure_queue(SupportedQos, PState),
-                           RoutingKey = Mqtt2AmqpFun(TopicName),
+                           TopicBag = Mqtt2AmqpFun(TopicName),
+                           RoutingKey = element(1, TopicBag),
                            Binding = #'queue.bind'{
                                        queue       = Queue,
                                        exchange    = Exchange,
@@ -318,7 +319,8 @@ process_request(?UNSUBSCRIBE,
                       {ok, Val} when is_list(Val) -> lists:usort(Val);
                       error                       -> []
                   end,
-        RoutingKey = Mqtt2AmqpFun(TopicName),
+        TopicBag = Mqtt2AmqpFun(TopicName),
+        RoutingKey = element(1, TopicBag),
         lists:foreach(
           fun (QosSub) ->
                   Queue = element(QosSub + 1, Queues),
@@ -406,7 +408,20 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
         {true, {?QOS_0, ?QOS_0}} ->
             {ok, PState};
         {Dup, {DeliveryQos, _SubQos} = Qos}     ->
-            TopicName = Amqp2MqttFun(RoutingKey),
+            PropertyBagB = rabbit_mqtt_util:env(property_bag),
+            TopicBagSuffix = if
+                PropertyBagB and not (Headers == undefined) ->
+                    %%io:format("Headers: ~p~n", [Headers]),
+                    KVPairs = [string:join([binary_to_list(element(1, X)), http_uri:encode(binary_to_list(element(3, X)))], "=") || X <- Headers, (element(2, X) == string) or (element(2, X) == longstr)],
+                    %%io:format("Pairs: ~p~n", [KVPairs]),
+                    if
+                        KVPairs == [] -> <<"">>;
+                        true -> erlang:iolist_to_binary("/" ++ string:join(KVPairs, "&"))
+                    end;
+                true ->
+                    <<"">>
+            end,
+            TopicName = [Amqp2MqttFun(RoutingKey), TopicBagSuffix],
             SendFun(
               #mqtt_frame{ fixed = #mqtt_frame_fixed{
                                      type = ?PUBLISH,
@@ -850,11 +865,12 @@ amqp_pub(#mqtt_msg{ qos        = Qos,
                                unacked_pubs   = UnackedPubs,
                                awaiting_seqno = SeqNo,
                                mqtt2amqp_fun  = Mqtt2AmqpFun }) ->
-    RoutingKey = Mqtt2AmqpFun(Topic),
+    TopicBag = Mqtt2AmqpFun(Topic),
+    RoutingKey = element(1, TopicBag),
     Method = #'basic.publish'{ exchange    = Exchange,
                                routing_key = RoutingKey },
-    Headers = [{<<"x-mqtt-publish-qos">>, byte, Qos},
-               {<<"x-mqtt-dup">>, bool, Dup}],
+    Headers = lists:append([{<<"x-mqtt-publish-qos">>, byte, Qos},
+               {<<"x-mqtt-dup">>, bool, Dup}], element(2, TopicBag)),
     Msg = #amqp_msg{ props   = #'P_basic'{ headers       = Headers,
                                            delivery_mode = delivery_mode(Qos)},
                      payload = Payload },
@@ -978,7 +994,8 @@ check_topic_access(TopicName, Access,
                                  kind = topic,
                                  name = Exchange},
 
-            RoutingKey = Mqtt2AmqpFun(TopicName),
+            TopicBag = Mqtt2AmqpFun(TopicName),
+            RoutingKey = element(1, TopicBag),
             Context = #{routing_key  => RoutingKey,
                         variable_map => #{
                                           <<"username">>  => Username,

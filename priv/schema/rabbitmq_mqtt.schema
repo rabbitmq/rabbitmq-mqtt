@@ -95,6 +95,12 @@ end}.
 {mapping, "mqtt.sparkplug", "rabbitmq_mqtt.sparkplug",
     [{datatype, {enum, [true, false]}}]}.
 
+%% Enable property bag - rfc2396 url encoded header fields
+%%
+%% {property_bag, true},
+{mapping, "mqtt.property_bag", "rabbitmq_mqtt.property_bag",
+    [{datatype, {enum, [true, false]}}]}.
+
 {mapping, "mqtt.retained_message_store", "rabbitmq_mqtt.retained_message_store",
     [{datatype, atom}]}.
 

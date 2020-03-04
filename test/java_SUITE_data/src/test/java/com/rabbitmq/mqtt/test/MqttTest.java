@@ -56,6 +56,7 @@ public class MqttTest implements MqttCallback {
     private final String brokerUrl = "tcp://" + host + ":" + getPort();
     private final String brokerThreeUrl = "tcp://" + host + ":" + getThirdPort();
     private volatile List<MqttMessage> receivedMessages;
+    private volatile String lastReceivedTopic;
 
     private final byte[] payload = "payload".getBytes();
     private final String topic = "test-topic";
@@ -492,6 +493,74 @@ public class MqttTest implements MqttCallback {
 
         waitAtMost(() -> receivedMessagesSize() == 1);
         disconnect(client);
+    }
+
+    @Test public void propertyBagTopics(TestInfo info) throws MqttException, IOException, InterruptedException, TimeoutException {
+        MqttConnectOptions client_opts = new TestMqttConnectOptions();
+        MqttClient client = newConnectedClient(info, client_opts);
+        try {
+            client.setCallback(this);
+            client.subscribe("/test-topic/#");
+            String[] cases = new String[] { "/test-topic", "/test-topic/a=b", "/test-topic/deep", "/frob/test-topic/deep" };
+            for (String example : cases) {
+                publish(client, example, 0, example.getBytes());
+            }
+            waitAtMost(() -> receivedMessagesSize() == 3);
+        } finally {
+            disconnect(client);
+        }
+    }
+
+    @Test public void propertyBagUrlEncoding(TestInfo info) throws MqttException, IOException, InterruptedException, TimeoutException {
+        MqttConnectOptions client_opts = new TestMqttConnectOptions();
+        MqttClient client = newConnectedClient(info, client_opts);
+        try {
+            client.setCallback(this);
+            client.subscribe("test-topic/#");
+
+            setUpAmqp();
+            AMQP.BasicProperties properties = new AMQP.BasicProperties.Builder().headers(new HashMap<String, Object>() {{ put("key", "Hallo Welt!"); }}).build();
+            ch.basicPublish("amq.topic", topic, properties, payload);
+            tearDownAmqp();
+
+            waitAtMost(() -> receivedMessagesSize() == 1);
+
+            assertEquals("test-topic/key=Hallo%20Welt!", lastReceivedTopic);
+        } finally {
+            disconnect(client);
+        }
+    }
+
+    @Test public void propertyBagUrlDecoding(TestInfo info) throws MqttException, IOException, InterruptedException, TimeoutException {
+        setUpAmqp();
+        try {
+            String queue = ch.queueDeclare().getQueue();
+            ch.queueBind(queue, "amq.topic", topic);
+
+            MqttConnectOptions client_opts = new TestMqttConnectOptions();
+            MqttClient client = newConnectedClient(info, client_opts);
+            try {
+                publish(client, "test-topic/key=Hallo%20Welt!", 1, payload);
+            } finally {
+                disconnect(client);
+            }
+
+            final CountDownLatch latch = new CountDownLatch(1);
+            final AtomicReference<Object> messageHeader = new AtomicReference<>();
+            ch.basicConsume(queue, true, new DefaultConsumer(ch) {
+                @Override
+                public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties,
+                        byte[] body) throws IOException {
+                    messageHeader.set(properties.getHeaders().get("key"));
+                    latch.countDown();
+                }
+            });
+            assertTrue(latch.await(EXPECT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
+            assertEquals("Hallo Welt!", messageHeader.get().toString());
+            assertNull(ch.basicGet(queue, true));
+        } finally {
+            tearDownAmqp();
+        }
     }
 
     @Test public void nonCleanSession(TestInfo info) throws MqttException, InterruptedException {
@@ -1000,6 +1069,7 @@ public class MqttTest implements MqttCallback {
     public void messageArrived(String topic, MqttMessage message) throws Exception {
         lastReceipt = System.currentTimeMillis();
         receivedMessages.add(message);
+        lastReceivedTopic = topic;
         if (failOnDelivery) {
             throw new Exception("unexpected delivery on topic " + topic);
         }
