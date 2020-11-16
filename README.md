@@ -1,5 +1,10 @@
 # RabbitMQ MQTT Plugin
 
+## This was migrated to https://github.com/rabbitmq/rabbitmq-server
+
+This repository has been moved to the main unified RabbitMQ "monorepo", including all open issues. You can find the source under [/deps/rabbitmq_mqtt](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_mqtt).
+All issues have been transferred.
+
 ## Getting Started
 
 This is an MQTT plugin for RabbitMQ.
